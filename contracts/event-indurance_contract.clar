@@ -28,3 +28,52 @@
         is-cancelled: bool,
         claim-deadline: uint
     }
+
+    (define-map insurance-policies
+    { event-id: uint, participant: principal }
+    {
+        amount: uint,
+        claimed: bool
+    }
+)
+
+(define-map event-verifiers
+    { event-id: uint }
+    {
+        weather-oracle: principal,
+        venue-oracle: principal,
+        government-oracle: principal
+    }
+)
+
+;; Public Functions
+
+(define-public (register-event 
+    (event-id uint) 
+    (event-date uint)
+    (premium-amount uint)
+    (max-participants uint))
+    (let
+        ((sender tx-sender))
+        ;; Validate inputs
+        (asserts! (> event-date block-height) ERR_INVALID_DATE)
+        (asserts! (> premium-amount u0) ERR_INVALID_AMOUNT)
+        (asserts! (> max-participants u0) ERR_INVALID_AMOUNT)
+        ;; Check event doesn't exist
+        (asserts! (is-none (map-get? events { event-id: event-id })) ERR_EVENT_EXISTS)
+        
+        (ok (map-set events
+            { event-id: event-id }
+            {
+                organizer: sender,
+                event-date: event-date,
+                total-insurance-pool: u0,
+                premium-amount: premium-amount,
+                max-participants: max-participants,
+                current-participants: u0,
+                is-cancelled: false,
+                claim-deadline: (+ event-date (var-get CLAIM_WINDOW_BLOCKS))
+            }
+        ))
+    )
+)
