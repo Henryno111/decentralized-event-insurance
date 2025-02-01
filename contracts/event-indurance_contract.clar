@@ -111,3 +111,77 @@
         ))
     )
 )
+(define-public (cancel-event (event-id uint))
+    (let
+        ((sender tx-sender)
+         (event (unwrap! (map-get? events { event-id: event-id }) ERR_EVENT_NOT_FOUND)))
+        
+        ;; Verify authorization
+        (asserts! (or 
+            (is-eq sender (get organizer event))
+            (is-authorized-verifier event-id sender)
+        ) ERR_UNAUTHORIZED)
+        
+        ;; Update event status
+        (ok (map-set events
+            { event-id: event-id }
+            (merge event { is-cancelled: true })
+        ))
+    )
+)
+
+(define-public (claim-insurance (event-id uint))
+    (let
+        ((sender tx-sender)
+         (event (unwrap! (map-get? events { event-id: event-id }) ERR_EVENT_NOT_FOUND))
+         (policy (unwrap! (map-get? insurance-policies { event-id: event-id, participant: sender }) ERR_NOT_INSURED)))
+        
+        ;; Validate claim
+        (asserts! (get is-cancelled event) ERR_EVENT_ACTIVE)
+        (asserts! (not (get claimed policy)) ERR_ALREADY_CLAIMED)
+        (asserts! (<= block-height (get claim-deadline event)) ERR_INVALID_DATE)
+        
+        ;; Process claim
+        (try! (as-contract (stx-transfer? 
+            (calculate-payout event-id (get amount policy))
+            tx-sender
+            sender
+        )))
+        
+        ;; Update policy
+        (ok (map-set insurance-policies
+            { event-id: event-id, participant: sender }
+            (merge policy { claimed: true })
+        ))
+    )
+)
+;; Read-Only Functions
+
+(define-read-only (get-event-details (event-id uint))
+    (map-get? events { event-id: event-id })
+)
+
+(define-read-only (get-policy-details (event-id uint) (participant principal))
+    (map-get? insurance-policies { event-id: event-id, participant: participant })
+)
+
+(define-read-only (is-authorized-verifier (event-id uint) (verifier principal))
+    (match (map-get? event-verifiers { event-id: event-id })
+        verifiers (or
+            (is-eq verifier (get weather-oracle verifiers))
+            (is-eq verifier (get venue-oracle verifiers))
+            (is-eq verifier (get government-oracle verifiers))
+        )
+        false
+    )
+)
+
+;; Private Functions
+
+(define-private (calculate-payout (event-id uint) (premium-amount uint))
+    ;; Simple payout calculation - could be made more complex based on requirements
+    (let
+        ((event (unwrap-panic (map-get? events { event-id: event-id }))))
+        (* premium-amount u2) ;; Example: 2x premium payout
+    )
+)
