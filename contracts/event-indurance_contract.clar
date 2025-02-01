@@ -111,3 +111,47 @@
         ))
     )
 )
+(define-public (cancel-event (event-id uint))
+    (let
+        ((sender tx-sender)
+         (event (unwrap! (map-get? events { event-id: event-id }) ERR_EVENT_NOT_FOUND)))
+        
+        ;; Verify authorization
+        (asserts! (or 
+            (is-eq sender (get organizer event))
+            (is-authorized-verifier event-id sender)
+        ) ERR_UNAUTHORIZED)
+        
+        ;; Update event status
+        (ok (map-set events
+            { event-id: event-id }
+            (merge event { is-cancelled: true })
+        ))
+    )
+)
+
+(define-public (claim-insurance (event-id uint))
+    (let
+        ((sender tx-sender)
+         (event (unwrap! (map-get? events { event-id: event-id }) ERR_EVENT_NOT_FOUND))
+         (policy (unwrap! (map-get? insurance-policies { event-id: event-id, participant: sender }) ERR_NOT_INSURED)))
+        
+        ;; Validate claim
+        (asserts! (get is-cancelled event) ERR_EVENT_ACTIVE)
+        (asserts! (not (get claimed policy)) ERR_ALREADY_CLAIMED)
+        (asserts! (<= block-height (get claim-deadline event)) ERR_INVALID_DATE)
+        
+        ;; Process claim
+        (try! (as-contract (stx-transfer? 
+            (calculate-payout event-id (get amount policy))
+            tx-sender
+            sender
+        )))
+        
+        ;; Update policy
+        (ok (map-set insurance-policies
+            { event-id: event-id, participant: sender }
+            (merge policy { claimed: true })
+        ))
+    )
+)
