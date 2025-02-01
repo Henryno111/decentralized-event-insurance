@@ -155,3 +155,33 @@
         ))
     )
 )
+;; Read-Only Functions
+
+(define-read-only (get-event-details (event-id uint))
+    (map-get? events { event-id: event-id })
+)
+
+(define-read-only (get-policy-details (event-id uint) (participant principal))
+    (map-get? insurance-policies { event-id: event-id, participant: participant })
+)
+
+(define-read-only (is-authorized-verifier (event-id uint) (verifier principal))
+    (match (map-get? event-verifiers { event-id: event-id })
+        verifiers (or
+            (is-eq verifier (get weather-oracle verifiers))
+            (is-eq verifier (get venue-oracle verifiers))
+            (is-eq verifier (get government-oracle verifiers))
+        )
+        false
+    )
+)
+
+;; Private Functions
+
+(define-private (calculate-payout (event-id uint) (premium-amount uint))
+    ;; Simple payout calculation - could be made more complex based on requirements
+    (let
+        ((event (unwrap-panic (map-get? events { event-id: event-id }))))
+        (* premium-amount u2) ;; Example: 2x premium payout
+    )
+)
