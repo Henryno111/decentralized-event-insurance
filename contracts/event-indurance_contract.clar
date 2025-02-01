@@ -77,3 +77,37 @@
         ))
     )
 )
+
+(define-public (purchase-insurance (event-id uint))
+    (let
+        ((sender tx-sender)
+         (event (unwrap! (map-get? events { event-id: event-id }) ERR_EVENT_NOT_FOUND))
+         (policy (map-get? insurance-policies { event-id: event-id, participant: sender })))
+        
+        ;; Validate purchase
+        (asserts! (is-none policy) ERR_ALREADY_INSURED)
+        (asserts! (< (get current-participants event) (get max-participants event)) ERR_INVALID_AMOUNT)
+        (asserts! (not (get is-cancelled event)) ERR_EVENT_ACTIVE)
+        
+        ;; Process payment
+        (try! (stx-transfer? (get premium-amount event) sender (as-contract tx-sender)))
+        
+        ;; Update event stats
+        (map-set events
+            { event-id: event-id }
+            (merge event {
+                total-insurance-pool: (+ (get total-insurance-pool event) (get premium-amount event)),
+                current-participants: (+ (get current-participants event) u1)
+            })
+        )
+        
+        ;; Create policy
+        (ok (map-set insurance-policies
+            { event-id: event-id, participant: sender }
+            {
+                amount: (get premium-amount event),
+                claimed: false
+            }
+        ))
+    )
+)
